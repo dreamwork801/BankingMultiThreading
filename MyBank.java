@@ -1,4 +1,7 @@
 import java.util.Random;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 /* Name: Zach Colby
  * Course CNT 4717 - Fall 2015
@@ -13,28 +16,32 @@ public class MyBank {
     Thread Thread1 = new Thread(new Deposit(), "Thread 1");
     Thread Thread2 = new Thread(new Deposit(), "Thread 2");
     Thread Thread3 = new Thread(new Deposit(), "Thread 3");
-    Thread Thread4 = new Thread(new Withdraw());
-    Thread Thread5 = new Thread(new Withdraw());
-    Thread Thread6 = new Thread(new Withdraw());
-    Thread Thread7 = new Thread(new Withdraw());
-    Thread Thread8 = new Thread(new Withdraw());
+    Thread Thread4 = new Thread(new Withdraw(), "Thread 4");
+    Thread Thread5 = new Thread(new Withdraw(), "Thread 5");
+    Thread Thread6 = new Thread(new Withdraw(), "Thread 6");
+    Thread Thread7 = new Thread(new Withdraw(), "Thread 7");
+    Thread Thread8 = new Thread(new Withdraw(), "Thread 8");
     Account myAccount = new Account();
     public static final int deposit = 200;
+    public static final int withdraw = 50;
+    Lock lock = new ReentrantLock();
 
     public static void main(String[] args) {
         new MyBank();
     }
 
     public MyBank() {
+        System.out.println("Deposit Threads\t\tWithdrawal Threads\tBalance");
+        System.out.println("-------------\t\t------------\t\t------------");
         // Start threads
         Thread1.start();
         Thread2.start();
         Thread3.start();
-        //Thread4.start();
-        //Thread5.start();
-        //Thread6.start();
-        //Thread7.start();
-        //Thread8.start();
+        Thread4.start();
+        Thread5.start();
+        Thread6.start();
+        Thread7.start();
+        Thread8.start();
     }
 
     // The thread class for making a withdraw from the account
@@ -43,10 +50,36 @@ public class MyBank {
         public Withdraw() {
         }
 
-        // Override the run() method to tell the system what the thread will do
+        // Override the run() method to tell the system what the thread will do 
         public void run() {
-            for (int i = 0; i < 10; i++)
-                System.out.print("test");
+            int i = 0;
+            int withdrawAmount = getRandomAmount(withdraw);
+            while (true){
+                try {
+                    if(lock.tryLock(1, TimeUnit.SECONDS)){
+                        boolean success = myAccount.Withdraw(withdrawAmount);
+                        System.out.print("\t\t\t" + Thread.currentThread().getName() + " withdraws $" + withdrawAmount);
+                        if (!success){
+                            System.out.println(" Withdrawal - Blocked - Insufficient Funds");
+                        }
+                        else
+                            System.out.println("\tBalance is $" + myAccount.getAmount());
+                    }
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }finally{
+                    //release lock
+                    lock.unlock();
+                    try {
+                        Thread.sleep(1);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                }       
+
+                if (i>100) { break; }
+                else { i++; }
+            }
         }
     }
 
@@ -57,31 +90,28 @@ public class MyBank {
         public Deposit() {
         }
 
-        // Tell the thread how to run 
+        // Override the run() method to tell the system what the thread will do 
         public void run() {
             int i = 0;
+            int depositAmount = getRandomAmount(deposit);
             while (true){
-                // Check to see if the account is locked
-                if (!myAccount.isLocked){
-                    // Try and lock it
-                    try {
-                        myAccount.SetLocked();
+                try {
+                    if(lock.tryLock(1, TimeUnit.SECONDS)){
+                        myAccount.Deposit(depositAmount);
+                        System.out.println(Thread.currentThread().getName() + " deposits $" + depositAmount + "\t\t\t\tBalance is $" + myAccount.getAmount());
                     }
-                    catch (IllegalThreadStateException e){
-                        System.out.println("Unsucessful Lock, Trying again...");
-                    }
-                    
-                    int depositAmount = getRandomAmount(deposit);
-                    myAccount.Deposit(depositAmount);
-                    System.out.println(Thread.currentThread().getName() + " deposits $" + depositAmount + "\t Balance is $" + myAccount.getAmount());
-                    myAccount.Unlock();
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }finally{
+                    //release lock
+                    lock.unlock();
                     try {
-                        Thread.sleep(100);
+                        Thread.sleep(2);
                     } catch (InterruptedException e) {
-                        // TODO Auto-generated catch block
                         e.printStackTrace();
                     }
-                }
+                }       
+
                 if (i>100) { break; }
                 else { i++; }
             }
@@ -89,23 +119,15 @@ public class MyBank {
     }
     
     class Account {
-        boolean isLocked;
         int Amount = 0;
         
         public int getAmount() { return Amount; }
         public void Deposit(int amount) { Amount += amount; }
-        public void Withdraw(int amount) { Amount -= amount; }
-        public boolean IsLocked() { return isLocked; }
-        public void SetLocked() {
-            if (isLocked){
-                throw new IllegalThreadStateException();
-            }
-            else{
-                this.isLocked = true;
-            }
-        }
-        public void Unlock(){
-            this.isLocked = false;
+        public boolean Withdraw(int amount) { 
+            if (amount > Amount)
+                return false;
+            Amount -= amount;
+            return true;
         }
     }
     
