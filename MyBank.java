@@ -1,5 +1,6 @@
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -12,7 +13,7 @@ import java.util.concurrent.locks.ReentrantLock;
 
 //Class to illustrate threads that create transactions for a bank account
 public class MyBank {
-    // Create threads
+    // Create 3 deposit and 5 withdrawal threads
     Thread Thread1 = new Thread(new Deposit(), "Thread 1");
     Thread Thread2 = new Thread(new Deposit(), "Thread 2");
     Thread Thread3 = new Thread(new Deposit(), "Thread 3");
@@ -22,9 +23,10 @@ public class MyBank {
     Thread Thread7 = new Thread(new Withdraw(), "Thread 7");
     Thread Thread8 = new Thread(new Withdraw(), "Thread 8");
     Account myAccount = new Account();
-    public static final int deposit = 200;
-    public static final int withdraw = 50;
+    public static final int deposit = 200; // deposit max for random seed
+    public static final int withdraw = 50; // withdraw max for random seed
     Lock lock = new ReentrantLock();
+    Condition nofunds = lock.newCondition();
 
     public static void main(String[] args) {
         new MyBank();
@@ -52,7 +54,6 @@ public class MyBank {
 
         // Override the run() method to tell the system what the thread will do 
         public void run() {
-            int i = 0;
             int withdrawAmount = getRandomAmount(withdraw);
             while (true){
                 try {
@@ -61,6 +62,7 @@ public class MyBank {
                         System.out.print("\t\t\t" + Thread.currentThread().getName() + " withdraws $" + withdrawAmount);
                         if (!success){
                             System.out.println(" Withdrawal - Blocked - Insufficient Funds");
+                            nofunds.await();
                         }
                         else
                             System.out.println("\tBalance is $" + myAccount.getAmount());
@@ -71,14 +73,12 @@ public class MyBank {
                     //release lock
                     lock.unlock();
                     try {
+                        // Sleep to allow other threads to go
                         Thread.sleep(1);
                     } catch (InterruptedException e) {
                         e.printStackTrace();
                     }
                 }       
-
-                if (i>100) { break; }
-                else { i++; }
             }
         }
     }
@@ -92,12 +92,12 @@ public class MyBank {
 
         // Override the run() method to tell the system what the thread will do 
         public void run() {
-            int i = 0;
             int depositAmount = getRandomAmount(deposit);
             while (true){
                 try {
                     if(lock.tryLock(1, TimeUnit.SECONDS)){
                         myAccount.Deposit(depositAmount);
+                        nofunds.signalAll();
                         System.out.println(Thread.currentThread().getName() + " deposits $" + depositAmount + "\t\t\t\tBalance is $" + myAccount.getAmount());
                     }
                 } catch (InterruptedException e) {
@@ -106,18 +106,17 @@ public class MyBank {
                     //release lock
                     lock.unlock();
                     try {
-                        Thread.sleep(2);
+                        // Sleep to allow other threads to go.
+                        Thread.sleep(5);
                     } catch (InterruptedException e) {
                         e.printStackTrace();
                     }
                 }       
-
-                if (i>100) { break; }
-                else { i++; }
             }
         }
     }
     
+    // Account object class
     class Account {
         int Amount = 0;
         
